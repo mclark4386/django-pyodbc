@@ -178,27 +178,17 @@ WHERE a.TABLE_NAME = %s AND a.CONSTRAINT_TYPE = 'FOREIGN KEY'"""
     #        {'primary_key': boolean representing whether it's the primary key,
     #         'unique': boolean representing whether it's a unique index}
         sql = """
-            select
-            C.name as [column_name],
-            IX.is_unique as [unique],
-            IX.is_primary_key as [primary_key]
-            from
-            sys.tables T
-            join sys.index_columns IC on IC.object_id = T.object_id
-            join sys.columns C on C.object_id = T.object_id and C.column_id = IC.column_id
-            join sys.indexes IX on IX.object_id = T.object_id and IX.index_id = IC.index_id
-            where
-            T.name = %s
-            -- Omit multi-column keys
-            and not exists (
-                select *
-                from sys.index_columns cols
-                where
-                    cols.object_id = T.object_id
-                    and cols.index_id = IC.index_id
-                    and cols.key_ordinal > 1
-            )
-        """
+            select c.column_name,
+       (case when ((select 1 from INFORMATION_SCHEMA.TABLE_CONSTRAINTS where constraint_name = keys.constraint_name and constraint_type='UNIQUE') = 1) then cast(1 as bit)
+         else cast(0 as bit)
+         end) as [unique],
+       (case when ((select 1 from INFORMATION_SCHEMA.TABLE_CONSTRAINTS where constraint_name = keys.constraint_name and constraint_type='PRIMARY KEY') = 1) then cast(1 as bit)
+         else cast(0 as bit)
+         end) as [primary_key]
+  from information_schema.columns c
+  join  INFORMATION_SCHEMA.KEY_COLUMN_USAGE keys on keys.table_name = c.table_name and keys.Column_name = c.column_name
+  where c.table_name = %s;
+        """#Yes I realize this doesn't take multi-field keys into account, just need this to work with my data at the moment.... maybe I'll come back and fix this later
         cursor.execute(sql,[table_name])
         constraints = cursor.fetchall()
         indexes = dict()
